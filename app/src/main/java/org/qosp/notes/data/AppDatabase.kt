@@ -1,6 +1,8 @@
 package org.qosp.notes.data
 
+import android.app.Application
 import androidx.room.Database
+import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
@@ -41,6 +43,19 @@ abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         const val DB_NAME = "notes_database"
+
+        @Volatile
+        private var instance: AppDatabase? = null
+
+        fun getDatabase(app: Application): AppDatabase {
+            return instance ?: synchronized(this) {
+                val instance = Room.databaseBuilder(app, AppDatabase::class.java, DB_NAME)
+                    .addMigrations(MIGRATION_1_2)
+                    .build()
+                this.instance = instance
+                return instance
+            }
+        }
 
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(database: SupportSQLiteDatabase) {
