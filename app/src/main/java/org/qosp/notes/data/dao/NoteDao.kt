@@ -42,6 +42,11 @@ interface NoteDao {
     @Query("SELECT * FROM notes WHERE id = :noteId")
     fun getById(noteId: Long): Flow<Note?>
 
+    // NF TODO: not sure this is correct
+    @Transaction
+    @Query("SELECT * FROM notes WHERE id = :noteId")
+    fun getListById(noteId: Long): List<NoteEntity>
+
     @Query(
         """
         UPDATE notes SET isDeleted = 1 WHERE id IN (

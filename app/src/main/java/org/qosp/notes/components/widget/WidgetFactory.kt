@@ -1,10 +1,9 @@
 package org.qosp.notes.components.widget
 
-
-
 import android.app.Application
 import android.content.Intent
 import android.os.Build
+import android.provider.ContactsContract
 import android.view.View
 import android.widget.RemoteViews
 import android.widget.RemoteViewsService
@@ -15,18 +14,18 @@ import org.qosp.notes.R
 // import com.omgodse.notally.room.BaseNote
 import org.qosp.notes.data.model.NoteEntity
 
+import org.qosp.notes.ui.main.MainViewModel
+
 // import com.omgodse.notally.room.NotallyDatabase
 import org.qosp.notes.data.AppDatabase
+
+import org.qosp.notes.data.dao.NoteDao
 
 // import com.omgodse.notally.room.Type
 // we use NoteEntity.isList
 
 // import com.omgodse.notally.viewmodels.BaseNoteModel
 import org.qosp.notes.data.model.Note
-
-
-
-
 
 class WidgetFactory(private val app: Application, private val id: Long) : RemoteViewsService.RemoteViewsFactory {
 
@@ -52,7 +51,6 @@ class WidgetFactory(private val app: Application, private val id: Long) : Remote
         } else 0
     }
      */
-
     override fun getCount(): Int {
         val copy = baseNote
         return if (copy != null) {
@@ -68,11 +66,12 @@ class WidgetFactory(private val app: Application, private val id: Long) : Remote
         baseNote = database.getBaseNoteDao().get(id)
     }
      */
+    // not sure this is correct
     override fun onDataSetChanged() {
-        baseNote = database.noteDao.getById(id).map {database.to}
-
+        baseNote = database.noteDao.getListById(id).first()
     }
 
+    /*
     override fun getViewAt(position: Int): RemoteViews {
         val copy = baseNote
         requireNotNull(copy)
@@ -86,8 +85,23 @@ class WidgetFactory(private val app: Application, private val id: Long) : Remote
             }
         }
     }
+    */
+    override fun getViewAt(position: Int): RemoteViews {
+        val copy = baseNote
+        requireNotNull(copy)
+
+        return when (copy.isList) {
+            false -> getNoteView(copy)
+            true -> {
+                if (position > 0) {
+                    getListItemView(position - 1, copy)
+                } else getListHeaderView(copy)
+            }
+        }
+    }
 
 
+    /*
     private fun getNoteView(note: BaseNote): RemoteViews {
         val view = RemoteViews(app.packageName, R.layout.widget_note)
 
@@ -110,8 +124,32 @@ class WidgetFactory(private val app: Application, private val id: Long) : Remote
 
         return view
     }
+    */
+    private fun getNoteView(note: NoteEntity): RemoteViews {
+        val view = RemoteViews(app.packageName, R.layout.widget_note)
 
+        if (note.title.isNotEmpty()) {
+            view.setTextViewText(R.id.Title, note.title)
+            view.setViewVisibility(R.id.Title, View.VISIBLE)
+        } else view.setViewVisibility(R.id.Title, View.GONE)
 
+        // NF TODO: handle date
+        // val formatter = BaseNoteModel.getDateFormatter(app)
+        // val date = formatter.format(note.timestamp)
+        // view.setTextViewText(R.id.Date, date)
+
+        if (note.content.isNotEmpty()) {
+            view.setTextViewText(R.id.Note, note.content)
+            view.setViewVisibility(R.id.Note, View.VISIBLE)
+        } else view.setViewVisibility(R.id.Note, View.GONE)
+
+        val intent = Intent(WidgetProvider.ACTION_OPEN_NOTE)
+        view.setOnClickFillInIntent(R.id.LinearLayout, intent)
+
+        return view
+    }
+
+    /*
     private fun getListHeaderView(list: BaseNote): RemoteViews {
         val view = RemoteViews(app.packageName, R.layout.widget_list_header)
 
@@ -129,7 +167,27 @@ class WidgetFactory(private val app: Application, private val id: Long) : Remote
 
         return view
     }
+    */
+    private fun getListHeaderView(list: NoteEntity): RemoteViews {
+        val view = RemoteViews(app.packageName, R.layout.widget_list_header)
 
+        if (list.title.isNotEmpty()) {
+            view.setTextViewText(R.id.Title, list.title)
+            view.setViewVisibility(R.id.Title, View.VISIBLE)
+        } else view.setViewVisibility(R.id.Title, View.GONE)
+
+        // NF TODO: handle date
+        // val formatter = BaseNoteModel.getDateFormatter(app)
+        // val date = formatter.format(list.timestamp)
+        // view.setTextViewText(R.id.Date, date)
+
+        val intent = Intent(WidgetProvider.ACTION_OPEN_LIST)
+        view.setOnClickFillInIntent(R.id.LinearLayout, intent)
+
+        return view
+    }
+
+    /*
     private fun getListItemView(index: Int, list: BaseNote): RemoteViews {
         val view = RemoteViews(app.packageName, R.layout.widget_list_item)
 
@@ -147,6 +205,29 @@ class WidgetFactory(private val app: Application, private val id: Long) : Remote
             if (item.checked) {
                 view.setTextViewCompoundDrawablesRelative(R.id.CheckBox, R.drawable.checkbox_fill, 0, 0, 0)
             } else view.setTextViewCompoundDrawablesRelative(R.id.CheckBox, R.drawable.checkbox_outline, 0, 0, 0)
+            view.setOnClickFillInIntent(R.id.CheckBox, intent)
+        }
+
+        return view
+    }
+    */
+    private fun getListItemView(index: Int, list: NoteEntity): RemoteViews {
+        val view = RemoteViews(app.packageName, R.layout.widget_list_item)
+
+        val item = list.items[index]
+        view.setTextViewText(R.id.CheckBox, item.body) // NF TODO: item.body ? can be anything
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            view.setCompoundButtonChecked(R.id.CheckBox, item.checked)
+            val intent = Intent(WidgetProvider.ACTION_CHECKED_CHANGED)
+            intent.putExtra(WidgetProvider.EXTRA_POSITION, index)
+            val response = RemoteViews.RemoteResponse.fromFillInIntent(intent)
+            view.setOnCheckedChangeResponse(R.id.CheckBox, response)
+        } else {
+            val intent = Intent(WidgetProvider.ACTION_OPEN_LIST)
+            if (item.checked) {
+                view.setTextViewCompoundDrawablesRelative(R.id.CheckBox, R.drawable.ic_box_checked, 0, 0, 0)
+            } else view.setTextViewCompoundDrawablesRelative(R.id.CheckBox, R.drawable.ic_box_checked_outline, 0, 0, 0)
             view.setOnClickFillInIntent(R.id.CheckBox, intent)
         }
 
